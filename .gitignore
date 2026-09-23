@@ -1,0 +1,6 @@
+# Test scratch
+tests/tmp/
+*.tmp
+
+# macOS noise
+.DS_Store
