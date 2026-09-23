@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# install — curl-pipable installer for ksm.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/GreeNxGit/ksm/main/install | bash
+#
+# Idempotent: re-running refreshes the library, leaves the keychain alone.
+
+set -eu
+
+REPO="${KSM_REPO:-GreeNxGit/ksm}"
+BRANCH="${KSM_BRANCH:-main}"
+RAW="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
+
+KSM_HOME="${KSM_HOME:-$HOME/.ksm}"
+mkdir -p "$KSM_HOME"
+
+# 1. Library
+echo "→ installing ksm.zsh → $KSM_HOME"
+if [[ -n "${KSM_LOCAL_DIR:-}" ]]; then
+  cp -f "$KSM_LOCAL_DIR/ksm.zsh" "$KSM_HOME/ksm.zsh"
+else
+  curl -fsSL "$RAW/ksm.zsh" -o "$KSM_HOME/ksm.zsh"
+fi
+
+# 2. Dedicated keychain (skip on non-macOS or when explicitly disabled).
+if [[ "${KSM_SKIP_KEYCHAIN:-0}" != 1 ]] && command -v security >/dev/null 2>&1; then
+  KSM_NAME="${KSM_KEYCHAIN:-ksm}"
+  KSM_KEYCHAIN_FILE="$HOME/Library/Keychains/${KSM_NAME}.keychain-db"
+  mkdir -p "$(dirname "$KSM_KEYCHAIN_FILE")"
+  LEGACY="$HOME/.ksm.keychain-db"
+  if [[ -f "$KSM_KEYCHAIN_FILE" ]]; then
+    echo "✓ keychain $KSM_KEYCHAIN_FILE already exists"
+  elif [[ -f "$LEGACY" ]]; then
+    mv "$LEGACY" "$KSM_KEYCHAIN_FILE"
+    echo "→ moved $LEGACY to $KSM_KEYCHAIN_FILE"
+  else
+    echo "→ creating dedicated keychain $KSM_KEYCHAIN_FILE (no password, no prompts)"
+    security create-keychain -p "" "$KSM_KEYCHAIN_FILE"
+    security set-keychain-settings -lut 86400 "$KSM_KEYCHAIN_FILE"
+    security unlock-keychain -p "" "$KSM_KEYCHAIN_FILE"
+  fi
+fi
+
+# 3. Patch ~/.zshrc
+touch "$HOME/.zshrc"
+if grep -qF 'ksm.zsh' "$HOME/.zshrc" 2>/dev/null; then
+  echo "✓ ~/.zshrc already patched"
+else
+  printf '\n# ksm: auto-export Keychain secrets, masked in echo/env/printenv\nsource %s/ksm.zsh\n' \
+    "$KSM_HOME" >> "$HOME/.zshrc"
+  echo "✓ patched ~/.zshrc"
+fi
+
+# 3b. kc-env migration note (never edited automatically).
+if grep -qF 'kc-env.zsh' "$HOME/.zshrc" 2>/dev/null; then
+  echo "note: ~/.zshrc still sources kc-env.zsh — remove that line to avoid duplicate auto-caching"
+fi
+
+# 4. Verify
+echo ""
+zsh -c "source $KSM_HOME/ksm.zsh; ksm doctor"
+
+echo ""
+echo "Try it:"
+echo "  ksm set GITHUB_TOKEN        # prompts, stores, exports (auto-cached in every new shell)"
+echo "  echo \$GITHUB_TOKEN           # prints **** — masked in echo, env, printenv"
+echo "  command echo \$GITHUB_TOKEN   # bypass when you really need the value"
+echo "  ksm cp GITHUB_TOKEN         # or copy it to the clipboard"

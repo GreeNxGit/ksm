@@ -12,14 +12,14 @@ test-all:
 
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck install.sh tests/*.sh; \
+		shellcheck install tests/*.sh; \
 	else \
 		echo "shellcheck not installed (brew install shellcheck)"; \
 	fi
 
 # Install from this checkout (no curl) — useful for local development.
 install-local:
-	@KSM_LOCAL_DIR=$(CURDIR) KSM_HOME=$$HOME/.ksm ./install.sh
+	@KSM_LOCAL_DIR=$(CURDIR) KSM_HOME=$$HOME/.ksm ./install
 
 clean:
 	@rm -rf tests/tmp
